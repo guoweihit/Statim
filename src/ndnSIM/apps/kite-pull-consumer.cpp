@@ -1,4 +1,4 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+// Statim simulation modifications, 2026-09-12. Original notices retained below.
 /**
  * Copyright (c) 2011-2015  Regents of the University of California.
  *
@@ -29,7 +29,8 @@
 #include "ns3/integer.h"
 #include "ns3/double.h"
 
-#include <ndn-cxx/lp/tags.hpp>
+
+#include <iomanip>
 
 NS_LOG_COMPONENT_DEFINE("ndn.kite.KitePullConsumer");
 
@@ -60,10 +61,12 @@ KitePullConsumer::GetTypeId(void)
                     IntegerValue(std::numeric_limits<uint32_t>::max()),
                     MakeIntegerAccessor(&KitePullConsumer::m_seqMax),
                     MakeIntegerChecker<uint32_t>())
-      .AddAttribute("attachNode", "",
-                    IntegerValue(0),
-                    MakeIntegerAccessor(&KitePullConsumer::m_attachNode),
-                    MakeIntegerChecker<uint32_t>())
+      .AddAttribute("LossWindowStart", "Start of the handover loss window",
+                    TimeValue(Seconds(0)),
+                    MakeTimeAccessor(&KitePullConsumer::m_lossWindowStart), MakeTimeChecker())
+      .AddAttribute("LossWindowLen", "Length of the handover loss window",
+                    TimeValue(Seconds(4)),
+                    MakeTimeAccessor(&KitePullConsumer::m_lossWindowLen), MakeTimeChecker())
 
     ;
 
@@ -75,125 +78,12 @@ KitePullConsumer::KitePullConsumer()
   , m_firstTime(true)
   , m_interestSent(0)
   , m_dataReceived(0)
-  , m_totalHopCount(0)
-  , m_totalOpHopCount(0)
+  , m_timeoutCount(0)
 {
   NS_LOG_FUNCTION_NOARGS();
   m_seqMax = std::numeric_limits<uint32_t>::max();
 
-  for (int i = 0; i < 11; i++)
-    paths[i][i] = 0;
 
-  paths[0][1] = 1;
-  paths[0][2] = 2;
-  paths[0][3] = 1;
-  paths[0][4] = 3;
-  paths[0][5] = 2;
-  paths[0][6] = 4;
-  paths[0][7] = 3;
-  paths[0][8] = 4;
-  paths[0][9] = 5;
-  paths[0][10] = 5;
-  paths[1][0] = 1;
-  paths[1][2] = 1;
-  paths[1][3] = 1;
-  paths[1][4] = 2;
-  paths[1][5] = 2;
-  paths[1][6] = 3;
-  paths[1][7] = 3;
-  paths[1][8] = 4;
-  paths[1][9] = 4;
-  paths[1][10] = 5;
-  paths[2][0] = 2;
-  paths[2][1] = 1;
-  paths[2][3] = 2;
-  paths[2][4] = 1;
-  paths[2][5] = 2;
-  paths[2][6] = 2;
-  paths[2][7] = 3;
-  paths[2][8] = 4;
-  paths[2][9] = 3;
-  paths[2][10] = 4;
-  paths[3][0] = 1;
-  paths[3][1] = 1;
-  paths[3][2] = 2;
-  paths[3][4] = 2;
-  paths[3][5] = 1;
-  paths[3][6] = 3;
-  paths[3][7] = 2;
-  paths[3][8] = 3;
-  paths[3][9] = 4;
-  paths[3][10] = 4;
-  paths[4][0] = 3;
-  paths[4][1] = 2;
-  paths[4][2] = 1;
-  paths[4][3] = 2;
-  paths[4][5] = 1;
-  paths[4][6] = 1;
-  paths[4][7] = 2;
-  paths[4][8] = 3;
-  paths[4][9] = 2;
-  paths[4][10] = 3;
-  paths[5][0] = 2;
-  paths[5][1] = 2;
-  paths[5][2] = 2;
-  paths[5][3] = 1;
-  paths[5][4] = 1;
-  paths[5][6] = 2;
-  paths[5][7] = 1;
-  paths[5][8] = 2;
-  paths[5][9] = 3;
-  paths[5][10] = 3;
-  paths[6][0] = 4;
-  paths[6][1] = 3;
-  paths[6][2] = 2;
-  paths[6][3] = 3;
-  paths[6][4] = 1;
-  paths[6][5] = 2;
-  paths[6][7] = 1;
-  paths[6][8] = 2;
-  paths[6][9] = 1;
-  paths[6][10] = 2;
-  paths[7][0] = 3;
-  paths[7][1] = 3;
-  paths[7][2] = 3;
-  paths[7][3] = 2;
-  paths[7][4] = 2;
-  paths[7][5] = 1;
-  paths[7][6] = 1;
-  paths[7][8] = 1;
-  paths[7][9] = 2;
-  paths[7][10] = 2;
-  paths[8][0] = 4;
-  paths[8][1] = 4;
-  paths[8][2] = 4;
-  paths[8][3] = 3;
-  paths[8][4] = 3;
-  paths[8][5] = 2;
-  paths[8][6] = 2;
-  paths[8][7] = 1;
-  paths[8][9] = 2;
-  paths[8][10] = 1;
-  paths[9][0] = 5;
-  paths[9][1] = 4;
-  paths[9][2] = 3;
-  paths[9][3] = 4;
-  paths[9][4] = 2;
-  paths[9][5] = 3;
-  paths[9][6] = 1;
-  paths[9][7] = 2;
-  paths[9][8] = 2;
-  paths[9][10] = 1;
-  paths[10][0] = 5;
-  paths[10][1] = 5;
-  paths[10][2] = 4;
-  paths[10][3] = 4;
-  paths[10][4] = 3;
-  paths[10][5] = 3;
-  paths[10][6] = 2;
-  paths[10][7] = 2;
-  paths[10][8] = 1;
-  paths[10][9] = 1;
 }
 
 KitePullConsumer::~KitePullConsumer()
@@ -209,17 +99,61 @@ KitePullConsumer::StartApplication()
 void
 KitePullConsumer::StopApplication()
 {
-  // NS_LOG_UNCOND("(Pull consumer) Sent Interest: " << m_interestSent);
-  // NS_LOG_UNCOND("(Pull consumer) Received Data: " << m_dataReceived);
-  // NS_LOG_UNCOND("(Pull consumer) Average hop count: " << m_totalHopCount * 1.0 / m_dataReceived);
-  // NS_LOG_UNCOND("(Pull consumer) Average best hop count: " << m_totalOpHopCount * 1.0 / m_dataReceived);
+  std::cerr << "===== KITE Consumer Summary =====" << std::endl;
+  std::cerr << "  Sent Interest:    " << m_interestSent << std::endl;
+  std::cerr << "  Unique seqs:      " << m_seqFirstSent.size() << std::endl;
+  std::cerr << "  Retransmissions:  " << (m_interestSent - m_seqFirstSent.size()) << std::endl;
+  std::cerr << "  Received Data:    " << m_dataReceived << std::endl;
+  std::cerr << "  Timeout events:   " << m_timeoutCount << std::endl;
 
-  std::cerr << "(Pull consumer) Sent Interest: " << m_interestSent << std::endl;
-  std::cerr << "(Pull consumer) Received Data: " << m_dataReceived << std::endl;
-  std::cerr << "(Pull consumer) Average hop count: " << m_totalHopCount * 1.0 / m_dataReceived << std::endl;
-  std::cerr << "(Pull consumer) Average best hop count: " << m_totalOpHopCount * 1.0 / m_dataReceived << std::endl;
+  // formula: never_satisfied_unique_seqs / unique_seqs_first_sent_in_window
+  if (m_lossWindowStart > Seconds(0)) {
+    Time wEnd = m_lossWindowStart + m_lossWindowLen;
+    uint32_t sentInWin = 0, neverSat = 0;
+    for (const auto& kv : m_seqFirstSent) {
+      if (kv.second >= m_lossWindowStart && kv.second < wEnd) {
+        ++sentInWin;
+        if (m_seqSatisfied.find(kv.first) == m_seqSatisfied.end())
+          ++neverSat;
+      }
+    }
+    double frac = sentInWin > 0 ? neverSat * 100.0 / sentInWin : 0.0;
+    std::cerr << "[WINDOW_LOSS] formula=never_satisfied_unique_seqs/first_sent_in_window"
+              << " window_start=" << m_lossWindowStart.GetSeconds() << "s"
+              << " window_len=" << m_lossWindowLen.GetSeconds() << "s"
+              << " sent_in_window=" << sentInWin
+              << " never_satisfied=" << neverSat
+              << " frac_pct=" << std::fixed << std::setprecision(4) << frac
+              << std::endl;
+  }
+  {
+    uint32_t neverSatTotal = 0;
+    for (const auto& kv : m_seqFirstSent) {
+      if (m_seqSatisfied.find(kv.first) == m_seqSatisfied.end())
+        ++neverSatTotal;
+    }
+    std::cerr << "[RUN_LOSS] unique_sent=" << m_seqFirstSent.size()
+              << " never_satisfied_total=" << neverSatTotal << std::endl;
+  }
 
   Consumer::StopApplication();
+}
+
+void
+KitePullConsumer::OnTimeout(uint32_t sequenceNumber)
+{
+  ++m_timeoutCount;
+  Consumer::OnTimeout(sequenceNumber);
+}
+
+void
+KitePullConsumer::WillSendOutInterest(uint32_t sequenceNumber)
+{
+  ++m_interestSent;
+  if (m_seqFirstSent.find(sequenceNumber) == m_seqFirstSent.end()) {
+    m_seqFirstSent[sequenceNumber] = Simulator::Now();
+  }
+  Consumer::WillSendOutInterest(sequenceNumber);
 }
 
 void
@@ -231,13 +165,11 @@ KitePullConsumer::ScheduleNextPacket()
   if (m_firstTime) {
     m_sendEvent = Simulator::Schedule(Seconds(0.0), &Consumer::SendPacket, this);
     m_firstTime = false;
-    ++m_interestSent;
   }
   else if (!m_sendEvent.IsRunning()) {
     m_sendEvent = Simulator::Schedule((m_random == 0) ? Seconds(1.0 / m_frequency)
                                                       : Seconds(m_random->GetValue()),
                                       &Consumer::SendPacket, this);
-    ++m_interestSent;
   }
 }
 
@@ -246,27 +178,15 @@ KitePullConsumer::OnData(shared_ptr<const Data> data)
 {
   ++m_dataReceived;
 
-  int hopCount = 0;
-  auto hopCountTag = data->getTag<lp::HopCountTag>();
-  if (hopCountTag != nullptr) { // e.g., packet came from local node's cache
-    hopCount = *hopCountTag;
-  }
   Name dataName = data->getName();
-  int opHopCount = paths[m_attachNode][dataName[-1].toSequenceNumber()] + 2;
-  NS_LOG_DEBUG("Hop count: " << hopCount << ", best: " << opHopCount);
-
-  if (hopCount < opHopCount) {
-    // because PIT entry for pulled Interest expired, data is cached and fetched with a shorter hop count
-    // set to the optimal path hop count to mitigate the effect
-    hopCount = opHopCount;
-  }
-
-  m_totalHopCount += hopCount;
-
-  m_totalOpHopCount += (opHopCount);
 
   shared_ptr<Data> newData = make_shared<Data>(data->wireEncode());
   newData->setName(dataName.getPrefix(dataName.size() - 1));
+
+  // Windowed per-sequence loss: mark this sequence satisfied
+  if (dataName.size() >= 2) {
+    m_seqSatisfied.insert(static_cast<uint32_t>(dataName.at(-2).toSequenceNumber()));
+  }
 
   Consumer::OnData(newData);
 }

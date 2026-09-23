@@ -1,4 +1,4 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+// Statim simulation modifications, 2026-09-12. Original notices retained below.
 /**
  * Copyright (c) 2011-2015  Regents of the University of California.
  *
@@ -80,8 +80,13 @@ GlobalRoutingHelper::Install(Ptr<Node> node)
   gr = CreateObject<GlobalRouter>();
   node->AggregateObject(gr);
 
-  for (auto& face : ndn->getForwarder()->getFaceTable()) {
-    auto transport = dynamic_cast<NetDeviceTransport*>(face.getTransport());
+  //for (auto& face : ndn->getForwarder()->getFaceTable()) {
+  //auto transport = dynamic_cast<NetDeviceTransport*>(face.getTransport());
+
+
+  for (auto& facePtr : ndn->getRegisteredFaces()) {
+    auto transport = dynamic_cast<NetDeviceTransport*>(facePtr->getTransport());
+
     if (transport == nullptr) {
       NS_LOG_DEBUG("Skipping non ndnSIM-specific transport face");
       continue;
@@ -116,7 +121,7 @@ GlobalRoutingHelper::Install(Ptr<Node> node)
         }
         otherGr = otherNode->GetObject<GlobalRouter>();
         NS_ASSERT(otherGr != 0);
-        gr->AddIncidency(face.shared_from_this(), otherGr);
+        gr->AddIncidency(facePtr, otherGr);
       }
     }
     else {
@@ -126,7 +131,7 @@ GlobalRoutingHelper::Install(Ptr<Node> node)
       }
       grChannel = ch->GetObject<GlobalRouter>();
 
-      // gr->AddIncidency(face.shared_from_this(), grChannel);
+      // gr->AddIncidency(facePtr, grChannel);
     }
   }
 }
@@ -217,10 +222,7 @@ GlobalRoutingHelper::AddOriginsForAll()
 void
 GlobalRoutingHelper::CalculateRoutes()
 {
-  /**
-   * Implementation of route calculation is heavily based on Boost Graph Library
-   * See http://www.boost.org/doc/libs/1_49_0/libs/graph/doc/table_of_contents.html for more details
-   */
+
 
   BOOST_CONCEPT_ASSERT((boost::VertexListGraphConcept<boost::NdnGlobalRouterGraph>));
   BOOST_CONCEPT_ASSERT((boost::IncidenceGraphConcept<boost::NdnGlobalRouterGraph>));
@@ -269,7 +271,6 @@ GlobalRoutingHelper::CalculateRoutes()
             NS_LOG_DEBUG(" prefix " << *prefix << " reachable via face " << *std::get<0>(dist.second)
                          << " with distance " << std::get<1>(dist.second) << " with delay "
                          << std::get<2>(dist.second));
-
             FibHelper::AddRoute(*node, *prefix, std::get<0>(dist.second),
                                 std::get<1>(dist.second));
           }
@@ -282,10 +283,6 @@ GlobalRoutingHelper::CalculateRoutes()
 void
 GlobalRoutingHelper::CalculateAllPossibleRoutes()
 {
-  /**
-   * Implementation of route calculation is heavily based on Boost Graph Library
-   * See http://www.boost.org/doc/libs/1_49_0/libs/graph/doc/table_of_contents.html for more details
-   */
 
   BOOST_CONCEPT_ASSERT((boost::VertexListGraphConcept<boost::NdnGlobalRouterGraph>));
   BOOST_CONCEPT_ASSERT((boost::IncidenceGraphConcept<boost::NdnGlobalRouterGraph>));

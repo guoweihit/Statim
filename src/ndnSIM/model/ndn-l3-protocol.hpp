@@ -1,4 +1,4 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+// Statim simulation modifications, 2026-09-12. Original notices retained below.
 /**
  * Copyright (c) 2011-2015  Regents of the University of California.
  *
@@ -45,6 +45,10 @@ class Policy;
 } // namespace cs
 } // namespace nfd
 
+namespace ns3 { namespace ndn { namespace statim {
+class ForwardingEngine;
+} } }
+
 namespace ns3 {
 
 class Packet;
@@ -53,34 +57,9 @@ class Header;
 
 namespace ndn {
 
-/**
- * \defgroup ndn ndnSIM: NDN simulation module
- *
- * This is a modular implementation of NDN protocol for NS-3
- */
-/**
- * \ingroup ndn
- * \brief Implementation network-layer of NDN stack
- *
- * This class defines the API to manipulate the following aspects of
- * the NDN stack implementation:
- * -# register a face (Face-derived object) for use by the NDN
- *    layer
- *
- * Each Face-derived object has conceptually a single NDN
- * interface associated with it.
- *
- * In addition, this class defines NDN packet coding constants
- *
- * \see Face, ForwardingStrategy
- */
 class L3Protocol : boost::noncopyable, public Object {
 public:
-  /**
-   * \brief Interface ID
-   *
-   * \return interface ID
-   */
+
   static TypeId
   GetTypeId();
 
@@ -88,79 +67,53 @@ public:
   static const uint16_t IP_STACK_PORT;       ///< @brief TCP/UDP port for NDN stack
   // static const uint16_t IP_PROTOCOL_TYPE;    ///< \brief IP protocol type of NDN
 
-  /**
-   * \brief Default constructor. Creates an empty stack without forwarding strategy set
-   */
+
   L3Protocol();
 
   virtual ~L3Protocol();
 
-  /**
-   * \brief Get smart pointer to nfd::Forwarder installed on the node
-   */
+
   shared_ptr<nfd::Forwarder>
   getForwarder();
 
-  /**
-   * \brief Get smart pointer to nfd::FibManager, used by node's NFD
-   */
+
   shared_ptr<nfd::FibManager>
   getFibManager();
 
-  /**
-   * \brief Get smart pointer to nfd::StrategyChoiceManager, used by node's NFD
-   */
+
   shared_ptr<nfd::StrategyChoiceManager>
   getStrategyChoiceManager();
 
-  /**
-   * \brief Add face to NDN stack
-   *
-   * \param face smart pointer to Face-derived object (AppFace, NetDeviceFace)
-   * \return nfd::FaceId
-   *
-   * \see AppFace, NetDeviceFace
-   */
+  bool
+  getEnableStatimPacket() const { return m_enableStatimPacket; }
+
+
   nfd::FaceId
   addFace(shared_ptr<Face> face);
 
-  /**
-   * \brief Get face by face ID
-   * \param face The face ID number
-   * \returns The Face associated with the Ndn face number.
-   */
+
   shared_ptr<Face>
   getFaceById(nfd::FaceId face) const;
 
-  // /**
-  //  * \brief Remove face from ndn stack (remove callbacks)
-  //  */
+  //
   // virtual void
   // removeFace(shared_ptr<Face> face);
 
-  /**
-   * \brief Get face for NetDevice
-   */
+
   shared_ptr<Face>
   getFaceByNetDevice(Ptr<NetDevice> netDevice) const;
 
-  /**
-   * \brief Get NFD config (boost::property_tree)
-   */
+
   nfd::ConfigSection&
   getConfig();
 
-  /**
-   * \brief Inject interest through internal Face
-   */
+
   void
   injectInterest(const Interest& interest);
 
   typedef std::function<std::unique_ptr<nfd::cs::Policy>()> PolicyCreationCallback;
 
-  /**
-   * \brief Set the replacement policy of NFD's CS
-   */
+
   void
   setCsReplacementPolicy(const PolicyCreationCallback& policy);
 
@@ -174,17 +127,13 @@ public:
 
   typedef void (*SatisfiedInterestsCallback)(const nfd::pit::Entry& pitEntry, const Face& inFace, const Data& data);
   typedef void (*TimedOutInterestsCallback)(const nfd::pit::Entry& pitEntry);
+  typedef void (*NackTraceCallback)(const lp::Nack&, const Face&);
 
 protected:
   virtual void
   DoDispose(void); ///< @brief Do cleanup
 
-  /**
-   * This function will notify other components connected to the node that a new stack member is now
-   * connected
-   * This will be used to notify Layer 3 protocol of layer 4 protocol stack to connect them
-   * together.
-   */
+
   virtual void
   NotifyNewAggregate();
 
@@ -216,7 +165,7 @@ private:
   TracedCallback<const lp::Nack&, const Face&> m_outNack; ///< @brief trace of outgoing Nack
   TracedCallback<const lp::Nack&, const Face&> m_inNack;  ///< @brief trace of incoming Nack
 
-  TracedCallback<const nfd::pit::Entry&, const Face&/*in face*/, const Data&> m_satisfiedInterests;
+  TracedCallback<const nfd::pit::Entry&, const Face&, const Data&> m_satisfiedInterests;
   TracedCallback<const nfd::pit::Entry&> m_timedOutInterests;
 
   bool m_doPull;        // re-express pending interest on new trace (new nexthop for a prefix)
@@ -227,9 +176,24 @@ private:
   bool m_prolongTrace;     // keep trace alive on dataflow
 
   bool m_removeTraceOnNack;
+  bool m_enableStatimPacket;
+  bool m_useStatimEngine;
+
+public:
+
+  std::shared_ptr<statim::ForwardingEngine>
+  getStatimEngine();
+
+
+  bool
+  isUsingStatimEngine() const { return m_useStatimEngine; }
+
+
+  std::vector<shared_ptr<Face>>
+  getRegisteredFaces() const;
 };
 
 } // namespace ndn
 } // namespace ns3
 
-#endif /* NDN_L3_PROTOCOL_H */
+#endif

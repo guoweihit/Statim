@@ -1,4 +1,4 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+// Statim simulation modifications, 2026-09-12. Original notices retained below.
 /**
  * Copyright (c) 2011-2016  Regents of the University of California.
  *
@@ -35,16 +35,13 @@
 namespace ns3 {
 namespace ndn {
 
-/**
- * \ingroup ndn-face
- * \brief ndnSIM-specific transport
- */
 class NetDeviceTransport : public nfd::face::Transport
 {
 public:
   NetDeviceTransport(Ptr<Node> node, const Ptr<NetDevice>& netDevice,
                      const std::string& localUri,
                      const std::string& remoteUri,
+                     bool enableStatimPacket = false,
                      ::ndn::nfd::FaceScope scope = ::ndn::nfd::FACE_SCOPE_NON_LOCAL,
                      ::ndn::nfd::FacePersistency persistency = ::ndn::nfd::FACE_PERSISTENCY_PERSISTENT,
                      ::ndn::nfd::LinkType linkType = ::ndn::nfd::LINK_TYPE_POINT_TO_POINT);
@@ -73,6 +70,7 @@ private:
 
   Ptr<NetDevice> m_netDevice; ///< \brief Smart pointer to NetDevice
   Ptr<Node> m_node;
+  bool m_enableStatimPacket;
 };
 
 } // namespace ndn

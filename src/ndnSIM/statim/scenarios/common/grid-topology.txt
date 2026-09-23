@@ -1,0 +1,26 @@
+# Six-router grid used by the handover scenarios.
+# RV, consumer and mobile producer links are added by the scenario:
+#   RV--R1, consumer--R4, MP--R3 (pre-handover) / MP--R6 (post-handover).
+# Router order determines the simulator node identifiers used by the scenarios.
+# Both handover programs use unit face costs for route calculation.
+# The metric column records the same cost of one per hop.
+
+router
+
+# node  comment yPos  xPos
+R1      NA      2     0
+R2      NA      2     2
+R3      NA      2     4
+R4      NA      0     0
+R5      NA      0     2
+R6      NA      0     4
+
+link
+
+# srcNode dstNode bandwidth metric delay queue
+R1  R2  1Gbps  1  10ms  10000
+R2  R3  1Gbps  1  10ms  10000
+R4  R5  1Gbps  1  10ms  10000
+R5  R6  1Gbps  1  10ms  10000
+R2  R5  1Gbps  1  10ms  10000
+R3  R6  1Gbps  1  10ms  10000

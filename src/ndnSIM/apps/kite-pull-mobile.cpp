@@ -1,4 +1,4 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+// Statim simulation modifications, 2026-09-12. Original notices retained below.
 /**
  * Copyright (c) 2011-2015  Regents of the University of California.
  *
@@ -26,6 +26,7 @@
 #include "ns3/double.h"
 #include "ns3/packet.h"
 #include "ns3/simulator.h"
+// Statim artifact profile, 2026-09-12: wired handover needs no Wi-Fi header.
 #include "ns3/node-list.h"
 
 #include "model/ndn-l3-protocol.hpp"
@@ -33,6 +34,7 @@
 
 #include <memory>
 #include <ctime>
+#include <iomanip>
 
 NS_LOG_COMPONENT_DEFINE("ndn.kite.KitePullMobile");
 
@@ -70,6 +72,8 @@ KitePullMobile::KitePullMobile()
   , m_rvData(0)
   , m_interestForData(0)
   , m_data(0)
+  , m_waitingForFirstInterest(false)
+  , m_useExternalAnchor(false)
 {
   NS_LOG_FUNCTION_NOARGS();
   m_seq = 1; // don't negotiate
@@ -79,7 +83,10 @@ KitePullMobile::KitePullMobile()
 void
 KitePullMobile::OnAssociation()
 {
+  if (!m_active)
+    return;
   NS_LOG_INFO("> Association done with AP");
+  m_waitingForFirstInterest = true;
   if (!m_negotiationDone)
     StartNegotiation();
   else
@@ -98,12 +105,28 @@ KitePullMobile::StartApplication()
 void
 KitePullMobile::StopApplication()
 {
-  // NS_LOG_UNCOND ("Tracing Overhead (%): " << (100.0 * (m_rvInterests + m_rvData) / (m_data +
-  // + m_rvInterests + m_rvData + m_interestForData))););
   std::cerr << "Tracing Overhead (number of messages): " << m_rvInterests + m_rvData << std::endl;
 
-  NS_LOG_FUNCTION_NOARGS();
+  if (!m_handoverDelays.empty()) {
+    double sum = 0, maxv = 0, minv = 1e18;
+    for (double d : m_handoverDelays) {
+      sum += d;
+      if (d > maxv) maxv = d;
+      if (d < minv) minv = d;
+    }
+    std::cerr << "\n=== HANDOVER DELAY (TI->firstInterest) ===" << std::endl;
+    std::cerr << "Count: " << m_handoverDelays.size() << std::endl;
+    std::cerr << "Avg: " << std::fixed << std::setprecision(3)
+              << sum / m_handoverDelays.size() << " ms" << std::endl;
+    std::cerr << "Min: " << minv << " ms" << std::endl;
+    std::cerr << "Max: " << maxv << " ms" << std::endl;
+    std::cerr << "All (ms):";
+    for (double d : m_handoverDelays) std::cerr << " " << std::setprecision(3) << d;
+    std::cerr << std::endl;
+    std::cerr << "==========================================\n" << std::endl;
+  }
 
+  NS_LOG_FUNCTION_NOARGS();
   App::StopApplication();
 }
 
@@ -139,6 +162,9 @@ KitePullMobile::StartNegotiation()
 void
 KitePullMobile::SendTrace()
 {
+  if (!m_active)
+    return;
+
   NS_LOG_FUNCTION_NOARGS();
 
   BOOST_ASSERT(m_seq > 0);
@@ -159,6 +185,8 @@ KitePullMobile::SendTrace()
   m_transmittedInterests(interest, this, m_face);
   m_appLink->onReceiveInterest(*interest);
 
+  m_lastTraceSendTime = Simulator::Now();
+
   if (m_traceRefreshEvent.IsRunning())
     Simulator::Cancel(m_traceRefreshEvent);
 
@@ -166,7 +194,7 @@ KitePullMobile::SendTrace()
     m_traceRefreshEvent =
       Simulator::Schedule(Seconds(m_refreshInterval.GetSeconds()), &KitePullMobile::SendTrace,
                           this); // Send out trace at fixed intervals
-  
+
   if (m_traceTimeoutEvent.IsRunning())
     Simulator::Cancel(m_traceTimeoutEvent);
 
@@ -271,6 +299,18 @@ KitePullMobile::OnInterest(shared_ptr<const Interest> interest)
 
   if (!m_active)
     return;
+
+  if (m_waitingForFirstInterest) {
+    Time anchor = m_useExternalAnchor ? m_hoAnchor : m_lastTraceSendTime;
+    double delayMs = (Simulator::Now() - anchor).GetDouble() / 1e6;
+    m_handoverDelays.push_back(delayMs);
+    std::cerr << "[HO_DELAY] t=" << std::fixed << std::setprecision(6)
+              << Simulator::Now().GetSeconds()
+              << " TI_sent=" << anchor.GetSeconds()
+              << " delay=" << std::setprecision(3) << delayMs << "ms"
+              << std::endl;
+    m_waitingForFirstInterest = false;
+  }
 
   NS_LOG_INFO("Pull mobile received Interest for: " << interest->getName());
   m_interestForData++;

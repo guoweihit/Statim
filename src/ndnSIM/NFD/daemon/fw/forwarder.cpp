@@ -1,4 +1,4 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+// Statim simulation modifications, 2026-09-12. Original notices retained below.
 /**
  * Copyright (c) 2014-2016,  Regents of the University of California,
  *                           Arizona Board of Regents,
@@ -703,23 +703,36 @@ Forwarder::updateTib(Face& inFace, const Data& data, const Interest& interest)
       NFD_LOG_INFO("Pulling... " << *dataPrefix);
 
       std::list<shared_ptr<pit::Entry>> pendingPulls;
+      int totalMatched = 0;
+      int passedCondition = 0;
+      int blockedCondition = 0;
 
       int cnt = m_maxPullCnt;
       for (auto& pitEntry : m_pit.findAllMatches(*dataPrefix)) {
+        ++totalMatched;
         // if not in the incoming or outcoming faces, pull
-        // a pitEntry without in-records is a satisfied, don't pull     
+        // a pitEntry without in-records is a satisfied, don't pull
         if (pitEntry->hasInRecords() && (pitEntry->getInRecord(inFace) == pitEntry->in_end())
             && (pitEntry->getOutRecord(inFace) == pitEntry->out_end())) {
           NFD_LOG_INFO("Pull " << pitEntry->getInterest().getName() << " towards " << inFace.getId() << " " << inFace);
           pendingPulls.push_back(pitEntry);
+          ++passedCondition;
           --cnt;
         }
         else {
-          NFD_LOG_INFO("Don't pull " << pitEntry->getInterest().getName() << " towards " << inFace.getId() << " " << inFace);   
+          NFD_LOG_INFO("Don't pull " << pitEntry->getInterest().getName() << " towards " << inFace.getId() << " " << inFace);
+          ++blockedCondition;
         }
         if (cnt <= 0)
           break;
       }
+
+      std::cerr << "[KITE_PULL] t=" << time::steady_clock::now().time_since_epoch().count() / 1000000
+                << "ms prefix=" << *dataPrefix
+                << " inFace=" << inFace.getId()
+                << " pit_matched=" << totalMatched
+                << " pulled=" << passedCondition
+                << " blocked=" << blockedCondition << std::endl;
 
       auto pPitEntry = pendingPulls.begin();
       for (int i = 0; i < 1000 && pPitEntry != pendingPulls.end(); ++i, ++pPitEntry) {
@@ -730,7 +743,6 @@ Forwarder::updateTib(Face& inFace, const Data& data, const Interest& interest)
         time::steady_clock::TimePoint lastExpiry = lastExpiring->getExpiry();
         time::nanoseconds lastExpiryFromNow = lastExpiry - time::steady_clock::now();
         if (lastExpiryFromNow <= time::seconds::zero()) {
-          // TODO all in-records are already expired; will this happen?
           continue;
         }
         shared_ptr<Interest> interest = make_shared<Interest>(pitEntry->getInterest().wireEncode());

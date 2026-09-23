@@ -1,4 +1,4 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+// Statim simulation modifications, 2026-09-12. Original notices retained below.
 /**
  * Copyright (c) 2011-2015  Regents of the University of California.
  *
@@ -53,6 +53,11 @@ BlockHeader::GetInstanceTypeId(void) const
 }
 
 BlockHeader::BlockHeader()
+{
+}
+
+BlockHeader::BlockHeader(const Block& block)
+  : m_block(block)
 {
 }
 

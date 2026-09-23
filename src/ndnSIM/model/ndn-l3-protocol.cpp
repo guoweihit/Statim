@@ -1,4 +1,4 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+// Statim simulation modifications, 2026-09-12. Original notices retained below.
 /**
  * Copyright (c) 2011-2015  Regents of the University of California.
  *
@@ -19,6 +19,7 @@
 
 #include "ndn-l3-protocol.hpp"
 
+#include "face/face.hpp"
 #include "ns3/packet.h"
 #include "ns3/node.h"
 #include "ns3/log.h"
@@ -39,6 +40,7 @@
 #include <boost/property_tree/info_parser.hpp>
 
 #include "ns3/ndnSIM/NFD/daemon/fw/forwarder.hpp"
+#include "ns3/ndnSIM/statim/forwarding-engine.hpp"
 #include "ns3/ndnSIM/NFD/daemon/face/internal-face.hpp"
 #include "ns3/ndnSIM/NFD/daemon/face/internal-transport.hpp"
 #include "ns3/ndnSIM/NFD/daemon/mgmt/fib-manager.hpp"
@@ -56,6 +58,7 @@
 
 #include "ns3/ndnSIM/NFD/core/config-file.hpp"
 
+#include <memory>
 #include <ndn-cxx/mgmt/dispatcher.hpp>
 
 NS_LOG_COMPONENT_DEFINE("ndn.L3Protocol");
@@ -84,21 +87,15 @@ L3Protocol::GetTypeId(void)
                       MakeTraceSourceAccessor(&L3Protocol::m_inInterests),
                       "ns3::ndn::L3Protocol::InterestTraceCallback")
 
-      ////////////////////////////////////////////////////////////////////
-
       .AddTraceSource("OutData", "OutData", MakeTraceSourceAccessor(&L3Protocol::m_outData),
                       "ns3::ndn::L3Protocol::DataTraceCallback")
       .AddTraceSource("InData", "InData", MakeTraceSourceAccessor(&L3Protocol::m_inData),
                       "ns3::ndn::L3Protocol::DataTraceCallback")
 
-      ////////////////////////////////////////////////////////////////////
-
       .AddTraceSource("OutNack", "OutNack", MakeTraceSourceAccessor(&L3Protocol::m_outNack),
                       "ns3::ndn::L3Protocol::NackTraceCallback")
       .AddTraceSource("InNack", "InNack", MakeTraceSourceAccessor(&L3Protocol::m_inNack),
                       "ns3::ndn::L3Protocol::NackTraceCallback")
-
-      ////////////////////////////////////////////////////////////////////
 
       .AddTraceSource("SatisfiedInterests", "SatisfiedInterests",
                       MakeTraceSourceAccessor(&L3Protocol::m_satisfiedInterests),
@@ -112,7 +109,15 @@ L3Protocol::GetTypeId(void)
       .AddAttribute("ProlongTrace", "Extend trace lifetime on dataflow", BooleanValue(false),
                     MakeBooleanAccessor(&L3Protocol::m_prolongTrace), MakeBooleanChecker())
       .AddAttribute("RemoveTrace", "Remove trace on NACK", BooleanValue(false),
-                    MakeBooleanAccessor(&L3Protocol::m_removeTraceOnNack), MakeBooleanChecker());
+                    MakeBooleanAccessor(&L3Protocol::m_removeTraceOnNack), MakeBooleanChecker())
+      .AddAttribute("EnableStatimPacket", "Enable STATIM fixed-length header on net-device transports",
+                    BooleanValue(false),
+                    MakeBooleanAccessor(&L3Protocol::m_enableStatimPacket),
+                    MakeBooleanChecker())
+      .AddAttribute("UseStatimEngine", "Use independent ForwardingEngine (no NFD dependency)",
+                    BooleanValue(false),
+                    MakeBooleanAccessor(&L3Protocol::m_useStatimEngine),
+                    MakeBooleanChecker());
   return tid;
 }
 
@@ -196,10 +201,15 @@ private:
 
   Ptr<ContentStore> m_csFromNdnSim;
   PolicyCreationCallback m_policy;
+
+  std::shared_ptr<statim::ForwardingEngine> m_statimEngine;
+  std::vector<std::shared_ptr<Face>> m_statimFaces;
 };
 
 L3Protocol::L3Protocol()
   : m_impl(new Impl())
+  , m_enableStatimPacket(false)
+  , m_useStatimEngine(false)
 {
   NS_LOG_FUNCTION(this);
 }
@@ -212,6 +222,12 @@ L3Protocol::~L3Protocol()
 void
 L3Protocol::initialize()
 {
+  if (m_useStatimEngine) {
+    m_impl->m_statimEngine = std::make_shared<statim::ForwardingEngine>();
+    m_impl->m_statimEngine->setEnableInterestReforwarding(m_doPull);
+    return;
+  }
+
   m_impl->m_forwarder = make_shared<nfd::Forwarder>();
 
   initializeManagement();
@@ -256,7 +272,7 @@ private:
 void
 L3Protocol::injectInterest(const Interest& interest)
 {
-  m_impl->m_internalFace->sendInterest(interest);
+    m_impl->m_internalFace->sendInterest(interest);
 }
 
 void
@@ -374,6 +390,12 @@ L3Protocol::getForwarder()
   return m_impl->m_forwarder;
 }
 
+std::shared_ptr<statim::ForwardingEngine>
+L3Protocol::getStatimEngine()
+{
+  return m_impl->m_statimEngine;
+}
+
 shared_ptr<nfd::FibManager>
 L3Protocol::getFibManager()
 {
@@ -392,10 +414,6 @@ L3Protocol::getConfig()
   return m_impl->m_config;
 }
 
-/*
- * This method is called by AddAgregate and completes the aggregation
- * by setting the node in the ndn stack
- */
 void
 L3Protocol::NotifyNewAggregate()
 {
@@ -404,10 +422,11 @@ L3Protocol::NotifyNewAggregate()
     if (m_node != nullptr) {
       initialize();
 
-      NS_ASSERT(m_impl->m_forwarder != nullptr);
-      m_impl->m_csFromNdnSim = GetObject<ContentStore>();
-      if (m_impl->m_csFromNdnSim != nullptr) {
-        m_impl->m_forwarder->setCsFromNdnSim(m_impl->m_csFromNdnSim);
+      if(m_impl->m_forwarder != nullptr) {
+        m_impl->m_csFromNdnSim = GetObject<ContentStore>();
+        if (m_impl->m_csFromNdnSim != nullptr) {
+          m_impl->m_forwarder->setCsFromNdnSim(m_impl->m_csFromNdnSim);
+        }
       }
     }
   }
@@ -434,12 +453,19 @@ nfd::FaceId
 L3Protocol::addFace(shared_ptr<Face> face)
 {
   NS_LOG_FUNCTION(this << face.get());
+  if (m_useStatimEngine && m_impl->m_statimEngine) {
+    m_impl->m_statimFaces.push_back(face);
 
+    auto* ndTransport = dynamic_cast<NetDeviceTransport*>(face->getTransport());
+    if (ndTransport != nullptr) {
+      m_impl->m_statimEngine->getPortTable().addDevice(ndTransport->GetNetDevice());
+    }
+   return 0;
+  }
   m_impl->m_forwarder->addFace(face);
 
   std::weak_ptr<Face> weakFace = face;
 
-  // // Connect Signals to TraceSource
   face->afterReceiveInterest.connect([this, weakFace](const Interest& interest) {
       shared_ptr<Face> face = weakFace.lock();
       if (face != nullptr) {
@@ -500,11 +526,25 @@ L3Protocol::getFaceByNetDevice(Ptr<NetDevice> netDevice) const
     auto transport = dynamic_cast<NetDeviceTransport*>(i.getTransport());
     if (transport == nullptr)
       continue;
-
     if (transport->GetNetDevice() == netDevice)
       return i.shared_from_this();
   }
   return nullptr;
+}
+
+std::vector<shared_ptr<Face>>
+L3Protocol::getRegisteredFaces() const
+{
+  std::vector<shared_ptr<Face>> result;
+  if (!m_impl->m_forwarder) {
+    result = m_impl->m_statimFaces;
+  }
+  else {
+    for (auto& face : m_impl->m_forwarder->getFaceTable()) {
+      result.push_back(face.shared_from_this());
+    }
+  }
+  return result;
 }
 
 Ptr<L3Protocol>

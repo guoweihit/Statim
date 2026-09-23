@@ -1,4 +1,4 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+// Statim simulation modifications, 2026-09-12. Original notices retained below.
 /**
  * Copyright (c) 2011-2015  Regents of the University of California.
  *
@@ -38,6 +38,10 @@
 #include "ns3/ndnSIM/NFD/daemon/face/generic-link-service.hpp"
 #include "ns3/ndnSIM/NFD/daemon/table/cs-policy-priority-fifo.hpp"
 #include "ns3/ndnSIM/NFD/daemon/table/cs-policy-lru.hpp"
+
+#include "ns3/ndnSIM/statim/forwarding-engine.hpp"
+#include "ns3/ndnSIM/statim/packet-header.hpp"
+#include "ns3/ndnSIM/statim/port-table.hpp"
 
 NS_LOG_COMPONENT_DEFINE("ndn.StackHelper");
 
@@ -263,7 +267,6 @@ constructFaceUri(Ptr<NetDevice> netDevice)
   return uri;
 }
 
-
 shared_ptr<Face>
 StackHelper::DefaultNetDeviceCallback(Ptr<Node> node, Ptr<L3Protocol> ndn,
                                       Ptr<NetDevice> netDevice) const
@@ -279,7 +282,8 @@ StackHelper::DefaultNetDeviceCallback(Ptr<Node> node, Ptr<L3Protocol> ndn,
 
   auto transport = make_unique<NetDeviceTransport>(node, netDevice,
                                                    constructFaceUri(netDevice),
-                                                   "netdev://[ff:ff:ff:ff:ff:ff]");
+                                                   "netdev://[ff:ff:ff:ff:ff:ff]",
+                                                   ndn->getEnableStatimPacket());
 
   auto face = std::make_shared<Face>(std::move(linkService), std::move(transport));
   face->setMetric(1);
@@ -317,7 +321,8 @@ StackHelper::PointToPointNetDeviceCallback(Ptr<Node> node, Ptr<L3Protocol> ndn,
 
   auto transport = make_unique<NetDeviceTransport>(node, netDevice,
                                                    constructFaceUri(netDevice),
-                                                   constructFaceUri(remoteNetDevice));
+                                                   constructFaceUri(remoteNetDevice),
+                                                   ndn->getEnableStatimPacket());
 
   auto face = std::make_shared<Face>(std::move(linkService), std::move(transport));
   face->setMetric(1);
@@ -407,12 +412,6 @@ StackHelper::disableRibManager()
 {
   m_isRibManagerDisabled = true;
 }
-
-// void
-// StackHelper::disableFaceManager()
-// {
-//   m_isFaceManagerDisabled = true;
-// }
 
 void
 StackHelper::disableStrategyChoiceManager()

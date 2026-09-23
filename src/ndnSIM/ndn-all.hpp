@@ -24,6 +24,7 @@
 #include "ns3/ndnSIM/helper/ndn-app-helper.hpp"
 #include "ns3/ndnSIM/helper/ndn-global-routing-helper.hpp"
 #include "ns3/ndnSIM/helper/ndn-network-region-table-helper.hpp"
+#include "ns3/ndnSIM/statim/helper/statim-helper.hpp"
 // #include "ns3/ndnSIM/helper/ndn-ip-faces-helper.hpp"
 // #include "ns3/ndnSIM/helper/ndn-link-control-helper.hpp"
 

@@ -1,4 +1,4 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+// Statim simulation modifications, 2026-09-12. Original notices retained below.
 /**
  * Copyright (c) 2011-2015  Regents of the University of California.
  *
@@ -24,22 +24,18 @@
 
 #include "ndn-consumer.hpp"
 
+#include <map>
+#include <set>
+
 namespace ns3 {
 namespace ndn {
 
-/**
- * @ingroup ndn-apps
- * @brief Ndn application for sending out Interest packets at a "constant" rate (Poisson process)
- */
 class KitePullConsumer : public Consumer {
 public:
   static TypeId
   GetTypeId();
 
-  /**
-   * \brief Default constructor
-   * Sets up randomizer function and packet sequence number
-   */
+
   KitePullConsumer();
   virtual ~KitePullConsumer();
 
@@ -53,25 +49,22 @@ private:
   virtual void
   StopApplication(); ///< @brief Called at time specified by Stop
 
+  virtual void
+  OnTimeout(uint32_t sequenceNumber);
+
+  virtual void
+  WillSendOutInterest(uint32_t sequenceNumber);
+
 protected:
-  /**
-   * \brief Constructs the Interest packet and sends it using a callback to the underlying NDN
-   * protocol
-   */
+
   virtual void
   ScheduleNextPacket();
 
-  /**
-   * @brief Set type of frequency randomization
-   * @param value Either 'none', 'uniform', or 'exponential'
-   */
+
   void
   SetRandomize(const std::string& value);
 
-  /**
-   * @brief Get type of frequency randomization
-   * @returns either 'none', 'uniform', or 'exponential'
-   */
+
   std::string
   GetRandomize() const;
 
@@ -81,14 +74,23 @@ protected:
   Ptr<RandomVariableStream> m_random;
   std::string m_randomType;
 
-  int m_interestSent;
-  int m_dataReceived;
-  int m_totalHopCount;
-  int m_totalOpHopCount;
+  uint64_t m_interestSent;
+  uint64_t m_dataReceived;
+  uint64_t m_timeoutCount;
 
-  int paths[11][11];
 
-  int m_attachNode;
+
+  // falls in [LossWindowStart, LossWindowStart+LossWindowLen) and that were
+  // never satisfied by the end of the run.
+  std::map<uint32_t, Time> m_seqFirstSent;
+  std::set<uint32_t> m_seqSatisfied;
+  Time m_lossWindowStart; // 0 = window reporting disabled
+  Time m_lossWindowLen;
+
+public:
+  uint64_t GetInterestSent() const { return m_interestSent; }
+  uint64_t GetUniqueInterestCount() const { return m_seqFirstSent.size(); }
+  uint64_t GetDataReceived() const { return m_dataReceived; }
 };
 
 } // namespace ndn

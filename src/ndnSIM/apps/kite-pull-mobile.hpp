@@ -1,4 +1,4 @@
-/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
+// Statim simulation modifications, 2026-09-12. Original notices retained below.
 /**
  * Copyright (c) 2011-2015  Regents of the University of California.
  *
@@ -31,12 +31,6 @@
 namespace ns3 {
 namespace ndn {
 
-/**
- * a mobile producer used in Pull scenario
- * - sends TI periodically
- * - (todo) adjust TI sending when receives Interest (assuming routers do prolongTrace)
- * - (todo) set TI lifetime to estimation of stay
- */
 class KitePullMobile : public Producer {
 public:
   static TypeId
@@ -101,11 +95,32 @@ private:
 
   int m_rvInterests; // interests sent to RV
   int m_rvData; // data received from RV
+
+public:
   int m_interestForData; // Interest for Data from consumer
   int m_data; // data packets sent to the consumer
 
 public:
   int m_current;
+
+  // Handover delay: attachment anchor -> first consumer Interest received.
+  // TI transmission supplies the default anchor; MarkHandover sets the
+  // scheduled attachment-change anchor used by the experiment scenarios.
+  Time m_lastTraceSendTime;
+  bool m_waitingForFirstInterest;
+  std::vector<double> m_handoverDelays; // ms
+
+  // Record the scheduled handover instant for the next delay measurement.
+  // See docs/experiments.md, Measurements, for the experiment definition.
+  void
+  MarkHandover(Time anchor)
+  {
+    m_waitingForFirstInterest = true;
+    m_useExternalAnchor = true;
+    m_hoAnchor = anchor;
+  }
+  bool m_useExternalAnchor;
+  Time m_hoAnchor;
 };
 
 } // namespace ndn

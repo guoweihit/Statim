@@ -1,0 +1,21 @@
+"""Build the explicitly listed Statim experiment and test programs."""
+
+def build(bld):
+    dependencies = ['ndnSIM', 'core', 'network', 'point-to-point', 'mobility']
+    targets = [
+        ('statim-grid', 'scenarios/statim-grid.cpp'),
+        ('kite-grid', 'scenarios/kite-grid.cpp'),
+        ('statim-path', 'scenarios/statim-path.cpp'),
+        ('statim-controller-faults', 'tests/controller-faults.cpp'),
+        ('temporary-fib-occupancy', 'tests/temporary-fib-occupancy.cpp'),
+        ('lpm-consistency', 'tests/lpm-consistency.cpp'),
+        ('state-table-tests', 'tests/state-tables.cpp'),
+        ('statim-packet-pipeline-tests', 'tests/packet-pipeline.cpp'),
+    ]
+    for name, source in targets:
+        program = bld.create_ns3_program(name, dependencies)
+        program.source = [source]
+
+    benchmark = bld.create_ns3_program('software-microbenchmark', dependencies)
+    benchmark.source = ['benchmarks/software-paths.cpp']
+    benchmark.cxxflags = ['-O2', '-std=c++14', '-Wall']
