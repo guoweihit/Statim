@@ -1,0 +1,3 @@
+# Scientific analysis runs on Python 3.10+ in a separate host environment.
+numpy>=1.26,<3
+scipy>=1.11,<2
